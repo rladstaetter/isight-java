@@ -2,20 +2,20 @@ package net.ladstatt.apps.isight
 
 import java.io.File
 import java.io.FileInputStream
-
 import org.opencv.core.Core
 import org.opencv.core.MatOfRect
 import org.opencv.core.Point
 import org.opencv.core.Scalar
 import org.opencv.highgui.Highgui
 import org.opencv.objdetect.CascadeClassifier
-
 import javafx.application.Application
 import javafx.scene.Group
 import javafx.scene.Scene
 import javafx.scene.image.Image
 import javafx.scene.image.ImageView
 import javafx.stage.Stage
+import org.opencv.highgui.VideoCapture
+import org.opencv.core.Mat
 
 object HelloOpenCVUsingIsight {
 
@@ -29,27 +29,30 @@ object HelloOpenCVUsingIsight {
 // see http://iharder.sourceforge.net/current/macosx/imagesnap/
 trait ImageSource {
 
-  def sourceImage: File = {
-    val runtime = Runtime.getRuntime()
-    // without options, it will just put the image snapshot to a file named "snapshot.jpg"
-    // we use it in quiet mode
-    val process = runtime.exec(Array("/opt/local/bin/imagesnap", "-q"))
-    assert(process.waitFor() == 0)
-    val input = new File("snapshot.jpg")
-    input.deleteOnExit()
-    input
+  def sourceImage: Either[Exception, Mat] = {
+    val videocapture = new VideoCapture(0)
+    assert(videocapture.isOpened())
+    if (videocapture.grab) {
+      val image = new Mat()
+      while (videocapture.read(image) == false) {
+        Thread.sleep(10)
+        println("waiting for camera ...")
+      } 
+      Right(image)
+    } else {
+      Left(new RuntimeException("Couldn't grab image!"))
+    }
   }
 
 }
 
 trait FaceScanner {
 
-  def scanFace(inputFile: File): File = {
+  def scanFace(image: Mat): File = {
 
     // Create a face detector from the cascade file in the resources
     // directory.
     val faceDetector = new CascadeClassifier(getClass().getResource("/lbpcascade_frontalface.xml").getPath())
-    val image = Highgui.imread(inputFile.getPath())
 
     // Detect faces in the image.
     // MatOfRect is a special container class for Rect.
@@ -82,13 +85,19 @@ class HelloOpenCVUsingIsight extends javafx.application.Application with ImageSo
 
     stage.setTitle("Webcam snapshot with face detection")
 
-    val group = new Group
-    val imageView = new ImageView(new Image(new FileInputStream(scanFace(sourceImage))))
-    group.getChildren.add(imageView)
-    val scene = new Scene(group)
+    sourceImage match {
+      case Left(e) => throw e
+      case Right(mat) => {
+        val group = new Group
+        val imageView = new ImageView(new Image(new FileInputStream(scanFace(mat))))
+        group.getChildren.add(imageView)
+        val scene = new Scene(group)
 
-    stage.setScene(scene)
-    stage.show()
+        stage.setScene(scene)
+        stage.show()
+
+      }
+    }
   }
 
 }
