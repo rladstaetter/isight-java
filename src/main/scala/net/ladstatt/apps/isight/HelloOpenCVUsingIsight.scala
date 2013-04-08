@@ -24,9 +24,6 @@ object HelloOpenCVUsingIsight {
   }
 }
 
-// this can get more complicated if you use a "native" approach
-// using a jni based solution
-// see http://iharder.sourceforge.net/current/macosx/imagesnap/
 trait ImageSource {
 
   def sourceImage: Either[Exception, Mat] = {
