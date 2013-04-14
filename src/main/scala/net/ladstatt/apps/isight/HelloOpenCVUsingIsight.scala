@@ -16,6 +16,9 @@ import javafx.scene.image.ImageView
 import javafx.stage.Stage
 import org.opencv.highgui.VideoCapture
 import org.opencv.core.Mat
+import org.opencv.core.MatOfByte
+import java.io.ByteArrayInputStream
+import java.io.InputStream
 
 object HelloOpenCVUsingIsight {
 
@@ -34,7 +37,7 @@ trait ImageSource {
       while (videocapture.read(image) == false) {
         Thread.sleep(10)
         println("waiting for camera ...")
-      } 
+      }
       Right(image)
     } else {
       Left(new RuntimeException("Couldn't grab image!"))
@@ -45,7 +48,7 @@ trait ImageSource {
 
 trait FaceScanner {
 
-  def scanFace(image: Mat): File = {
+  def scanFace(image: Mat): InputStream = {
 
     // Create a face detector from the cascade file in the resources
     // directory.
@@ -61,12 +64,9 @@ trait FaceScanner {
       Core.rectangle(image, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height), new Scalar(0, 255, 0))
     }
 
-    // Save the visualized detection.
-    val fileName = "faceDetection.png"
-    Highgui.imwrite(fileName, image)
-    val f = new File(fileName)
-    f.deleteOnExit()
-    f
+    val memory = new MatOfByte
+    Highgui.imencode(".png", image, memory)
+    new ByteArrayInputStream(memory.toArray())
   }
 
 }
@@ -86,7 +86,7 @@ class HelloOpenCVUsingIsight extends javafx.application.Application with ImageSo
       case Left(e) => throw e
       case Right(mat) => {
         val group = new Group
-        val imageView = new ImageView(new Image(new FileInputStream(scanFace(mat))))
+        val imageView = new ImageView(new Image(scanFace(mat)))
         group.getChildren.add(imageView)
         val scene = new Scene(group)
 
