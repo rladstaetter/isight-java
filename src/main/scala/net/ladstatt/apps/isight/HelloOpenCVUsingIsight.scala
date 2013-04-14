@@ -1,41 +1,39 @@
 package net.ladstatt.apps.isight
 
+import java.io.ByteArrayInputStream
 import java.io.File
-import java.io.FileInputStream
+
 import org.opencv.core.Core
+import org.opencv.core.Mat
+import org.opencv.core.MatOfByte
 import org.opencv.core.MatOfRect
 import org.opencv.core.Point
 import org.opencv.core.Scalar
 import org.opencv.highgui.Highgui
-import org.opencv.objdetect.CascadeClassifier
-import javafx.application.Application
-import javafx.scene.Group
-import javafx.scene.Scene
-import javafx.scene.image.Image
-import javafx.scene.image.ImageView
-import javafx.stage.Stage
 import org.opencv.highgui.VideoCapture
-import org.opencv.core.Mat
-import org.opencv.core.MatOfByte
-import java.io.ByteArrayInputStream
-import java.io.InputStream
+import org.opencv.objdetect.CascadeClassifier
+
+import javafx.application.Application
 import javafx.beans.property.SimpleObjectProperty
 import javafx.concurrent.Service
 import javafx.concurrent.Task
-import java.io.IOException
-import javafx.event.EventHandler
 import javafx.concurrent.WorkerStateEvent
+import javafx.event.EventHandler
+import javafx.scene.Scene
 import javafx.scene.control.Label
-import javafx.scene.layout.StackPane
-import javafx.scene.text.Font
-import javafx.util.converter.IntegerStringConverter
-import javafx.util.StringConverter
-import javafx.beans.binding.Bindings
 import javafx.scene.control.ToggleButton
+import javafx.scene.image.Image
+import javafx.scene.image.ImageView
 import javafx.scene.layout.BorderPane
 import javafx.scene.layout.HBox
-import javafx.scene.Node
+import javafx.scene.text.Font
+import javafx.stage.Stage
+import javafx.util.StringConverter
+import javafx.util.converter.IntegerStringConverter
 
+/**
+ * see also http://ladstatt.blogspot.com/
+ */
 object HelloOpenCVUsingIsight {
 
   def main(args: Array[String]): Unit = {
@@ -79,11 +77,9 @@ trait ImageSource {
 
 trait FaceScanner {
 
-  def scanFace(image: Mat): Mat = {
+  def faceDetector: CascadeClassifier
 
-    // Create a face detector from the cascade file in the resources
-    // directory.
-    val faceDetector = new CascadeClassifier(getClass().getResource("/lbpcascade_frontalface.xml").getPath())
+  def scanFace(image: Mat): Mat = {
 
     // Detect faces in the image.
     // MatOfRect is a special container class for Rect.
@@ -101,6 +97,7 @@ trait FaceScanner {
 }
 
 class WebcamService extends Service[Either[Exception, Mat]] with OpenCVUtils with ImageSource {
+
   val videoCapture: VideoCapture = new VideoCapture(0)
 
   def createTask(): Task[Either[Exception, Mat]] = {
@@ -113,9 +110,23 @@ class WebcamService extends Service[Either[Exception, Mat]] with OpenCVUtils wit
 
 class HelloOpenCVUsingIsight extends javafx.application.Application with FaceScanner with OpenCVUtils {
 
+  // Create a face detector from the cascade file in the resources directory.
+  var faceDetector: CascadeClassifier = _
+
+  val runOnMac =
+    {
+      System.getProperty("os.name").toLowerCase match {
+        case "mac os x" => true
+        case _ => false
+      }
+    }
+
+  val nativeLibName = if (runOnMac) "/opt/local/share/OpenCV/java/libopencv_java244.dylib" else "c:/openCV/build/java/opencv-244.jar"
+
   override def init(): Unit = {
     // important to have this statement on the "right" thread
-    System.load(new File("/opt/local/share/OpenCV/java/libopencv_java244.dylib").getAbsolutePath())
+    System.load(new File(nativeLibName).getAbsolutePath())
+    faceDetector = new CascadeClassifier(getClass().getResource("/lbpcascade_frontalface.xml").getPath())
   }
 
   val imageProperty = new SimpleObjectProperty[Image]()
@@ -139,7 +150,7 @@ class HelloOpenCVUsingIsight extends javafx.application.Application with FaceSca
     stage.setTitle("Webcam snapshot with face detection")
     val bp = new BorderPane
     val imageView = new ImageView()
-    val label = new Label("FPS:")
+    val label = new Label()
     label.fontProperty().setValue(Font.font("Verdana", 80))
     val toggleBtn = new ToggleButton("with face recognition")
     imageView.imageProperty().bind(imageProperty)
