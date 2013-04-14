@@ -19,6 +19,22 @@ import org.opencv.core.Mat
 import org.opencv.core.MatOfByte
 import java.io.ByteArrayInputStream
 import java.io.InputStream
+import javafx.beans.property.SimpleObjectProperty
+import javafx.concurrent.Service
+import javafx.concurrent.Task
+import java.io.IOException
+import javafx.event.EventHandler
+import javafx.concurrent.WorkerStateEvent
+import javafx.scene.control.Label
+import javafx.scene.layout.StackPane
+import javafx.scene.text.Font
+import javafx.util.converter.IntegerStringConverter
+import javafx.util.StringConverter
+import javafx.beans.binding.Bindings
+import javafx.scene.control.ToggleButton
+import javafx.scene.layout.BorderPane
+import javafx.scene.layout.HBox
+import javafx.scene.Node
 
 object HelloOpenCVUsingIsight {
 
@@ -27,18 +43,33 @@ object HelloOpenCVUsingIsight {
   }
 }
 
+trait OpenCVUtils {
+
+  def mat2Image(mat: Mat): Image = {
+    val memory = new MatOfByte
+    Highgui.imencode(".png", mat, memory)
+    new Image(new ByteArrayInputStream(memory.toArray()))
+  }
+
+}
+
 trait ImageSource {
 
-  def sourceImage: Either[Exception, Mat] = {
-    val videocapture = new VideoCapture(0)
-    assert(videocapture.isOpened())
-    if (videocapture.grab) {
-      val image = new Mat()
-      while (videocapture.read(image) == false) {
-        Thread.sleep(10)
-        println("waiting for camera ...")
-      }
-      Right(image)
+  def videoCapture: VideoCapture
+
+  def takeImage: Mat = {
+    val image = new Mat()
+    while (videoCapture.read(image) == false) {
+      Thread.sleep(1)
+      println("waiting for camera ...")
+    }
+    image
+  }
+
+  def sourceMat: Either[Exception, Mat] = {
+    assert(videoCapture.isOpened())
+    if (videoCapture.grab) {
+      Right(takeImage)
     } else {
       Left(new RuntimeException("Couldn't grab image!"))
     }
@@ -48,7 +79,7 @@ trait ImageSource {
 
 trait FaceScanner {
 
-  def scanFace(image: Mat): InputStream = {
+  def scanFace(image: Mat): Mat = {
 
     // Create a face detector from the cascade file in the resources
     // directory.
@@ -64,37 +95,77 @@ trait FaceScanner {
       Core.rectangle(image, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height), new Scalar(0, 255, 0))
     }
 
-    val memory = new MatOfByte
-    Highgui.imencode(".png", image, memory)
-    new ByteArrayInputStream(memory.toArray())
+    image
   }
 
 }
 
-class HelloOpenCVUsingIsight extends javafx.application.Application with ImageSource with FaceScanner {
+class WebcamService extends Service[Either[Exception, Mat]] with OpenCVUtils with ImageSource {
+  val videoCapture: VideoCapture = new VideoCapture(0)
+
+  def createTask(): Task[Either[Exception, Mat]] = {
+    new Task[Either[Exception, Mat]] {
+      override def call(): Either[Exception, Mat] = sourceMat
+    }
+  }
+
+}
+
+class HelloOpenCVUsingIsight extends javafx.application.Application with FaceScanner with OpenCVUtils {
 
   override def init(): Unit = {
     // important to have this statement on the "right" thread
     System.load(new File("/opt/local/share/OpenCV/java/libopencv_java244.dylib").getAbsolutePath())
   }
 
+  val imageProperty = new SimpleObjectProperty[Image]()
+  def setImage(image: Image) = imageProperty.set(image)
+  def getImage(): Image = imageProperty.get
+
+  val converter = new IntegerStringConverter().asInstanceOf[StringConverter[Long]]
+
+  def mkTop(toggleButton: ToggleButton): HBox = {
+    val hbox = new HBox()
+    hbox.getChildren().add(toggleButton)
+    hbox.setStyle("-fx-padding: 15;" +
+      "-fx-background-color: #333333, " +
+      "linear-gradient(#f3f3f3 0%, #ced3da 100%);" +
+      "-fx-background-insets: 0, 0 0 1 0;")
+    hbox
+  }
+
   override def start(stage: Stage): Unit = {
-
+    val imageService = new WebcamService
     stage.setTitle("Webcam snapshot with face detection")
+    val bp = new BorderPane
+    val imageView = new ImageView()
+    val label = new Label("FPS:")
+    label.fontProperty().setValue(Font.font("Verdana", 80))
+    val toggleBtn = new ToggleButton("with face recognition")
+    imageView.imageProperty().bind(imageProperty)
+    bp.setTop(mkTop(toggleBtn))
+    bp.setCenter(imageView)
+    bp.setBottom(label)
+    val scene = new Scene(bp, 1280, 920)
+    stage.setScene(scene)
 
-    sourceImage match {
-      case Left(e) => throw e
-      case Right(mat) => {
-        val group = new Group
-        val imageView = new ImageView(new Image(scanFace(mat)))
-        group.getChildren.add(imageView)
-        val scene = new Scene(group)
-
-        stage.setScene(scene)
-        stage.show()
-
+    imageService.setOnSucceeded(new EventHandler[WorkerStateEvent] {
+      override def handle(event: WorkerStateEvent) = {
+        event.getSource().getValue match {
+          case Left(e: RuntimeException) => println(e.getMessage)
+          case Right(mat: Mat) => {
+            val old = System.currentTimeMillis()
+            setImage(mat2Image(if (toggleBtn.isSelected()) scanFace(mat) else mat))
+            val time = (System.currentTimeMillis() - old)
+            label.textProperty.set("%s ms".format(time))
+            imageService.restart
+          }
+        }
       }
-    }
+    })
+    imageService.start
+    stage.show()
+
   }
 
 }
