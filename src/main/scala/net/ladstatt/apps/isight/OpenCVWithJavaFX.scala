@@ -2,7 +2,6 @@ package net.ladstatt.apps.isight
 
 import java.io.ByteArrayInputStream
 import java.io.File
-
 import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.MatOfByte
@@ -12,7 +11,6 @@ import org.opencv.core.Scalar
 import org.opencv.highgui.Highgui
 import org.opencv.highgui.VideoCapture
 import org.opencv.objdetect.CascadeClassifier
-
 import javafx.application.Application
 import javafx.beans.property.SimpleObjectProperty
 import javafx.concurrent.Service
@@ -30,14 +28,17 @@ import javafx.scene.text.Font
 import javafx.stage.Stage
 import javafx.util.StringConverter
 import javafx.util.converter.IntegerStringConverter
+import org.opencv.core.Range
+import javafx.scene.control.Slider
+import javafx.geometry.Orientation
 
 /**
  * see also http://ladstatt.blogspot.com/
  */
-object HelloOpenCVUsingIsight {
+object OpenCVWithJavaFX {
 
   def main(args: Array[String]): Unit = {
-    Application.launch(classOf[HelloOpenCVUsingIsight], args: _*)
+    Application.launch(classOf[OpenCVWithJavaFX], args: _*)
   }
 }
 
@@ -108,7 +109,7 @@ class WebcamService extends Service[Either[Exception, Mat]] with OpenCVUtils wit
 
 }
 
-class HelloOpenCVUsingIsight extends javafx.application.Application with FaceScanner with OpenCVUtils {
+class OpenCVWithJavaFX extends javafx.application.Application with FaceScanner with OpenCVUtils {
 
   // Create a face detector from the cascade file in the resources directory.
   var faceDetector: CascadeClassifier = _
@@ -135,9 +136,8 @@ class HelloOpenCVUsingIsight extends javafx.application.Application with FaceSca
 
   val converter = new IntegerStringConverter().asInstanceOf[StringConverter[Long]]
 
-  def mkTop(toggleButton: ToggleButton): HBox = {
+  def mkTop: HBox = {
     val hbox = new HBox()
-    hbox.getChildren().add(toggleButton)
     hbox.setStyle("-fx-padding: 15;" +
       "-fx-background-color: #333333, " +
       "linear-gradient(#f3f3f3 0%, #ced3da 100%);" +
@@ -145,17 +145,43 @@ class HelloOpenCVUsingIsight extends javafx.application.Application with FaceSca
     hbox
   }
 
+  def mkSlider(min: Int, max: Int, orientation : Orientation): Slider = {
+    val slider = new Slider()
+    slider.setMin(min)
+    slider.setMax(max)
+    slider.setValue(max / 2)
+    slider.setShowTickLabels(true)
+    slider.setShowTickMarks(true)
+    slider.setMajorTickUnit(100)
+    slider.setMinorTickCount(20)
+    slider.setBlockIncrement(1)
+    slider.setOrientation(orientation)
+    slider
+  }
+
+  val MaxWidth = 1280
+  val MaxHeight = 720
+
   override def start(stage: Stage): Unit = {
     val imageService = new WebcamService
     stage.setTitle("Webcam snapshot with face detection")
     val bp = new BorderPane
     val imageView = new ImageView()
     val label = new Label()
+    val imageBp = new BorderPane
+
     label.fontProperty().setValue(Font.font("Verdana", 80))
+    val widthSlider = mkSlider(2, MaxWidth, Orientation.HORIZONTAL)
+    val heightSlider = mkSlider(2, MaxHeight, Orientation.VERTICAL)
     val toggleBtn = new ToggleButton("with face recognition")
     imageView.imageProperty().bind(imageProperty)
-    bp.setTop(mkTop(toggleBtn))
-    bp.setCenter(imageView)
+    val topBox = mkTop
+    topBox.getChildren.addAll(toggleBtn)
+    imageBp.setCenter(imageView)
+    imageBp.setRight(heightSlider)
+    imageBp.setBottom(widthSlider)
+    bp.setTop(topBox)
+    bp.setCenter(imageBp)
     bp.setBottom(label)
     val scene = new Scene(bp, 1280, 920)
     stage.setScene(scene)
@@ -165,8 +191,9 @@ class HelloOpenCVUsingIsight extends javafx.application.Application with FaceSca
         event.getSource().getValue match {
           case Left(e: RuntimeException) => println(e.getMessage)
           case Right(mat: Mat) => {
+            val choppedMat = new Mat(mat, new Range(1, heightSlider.getValue.toInt), new Range(1, widthSlider.getValue.toInt))
             val old = System.currentTimeMillis()
-            setImage(mat2Image(if (toggleBtn.isSelected()) scanFace(mat) else mat))
+            setImage(mat2Image(if (toggleBtn.isSelected()) scanFace(choppedMat) else choppedMat))
             val time = (System.currentTimeMillis() - old)
             label.textProperty.set("%s ms".format(time))
             imageService.restart

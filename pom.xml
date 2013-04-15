@@ -81,7 +81,7 @@
 				</executions>
 				<configuration>
 					<vendor>${project.organization.name}</vendor>
-					<mainClass>net.ladstatt.apps.isight.HelloOpenCVUsingIsight</mainClass>
+					<mainClass>net.ladstatt.apps.isight.OpenCVWithJavaFX</mainClass>
 					<permissions>
 						<permission>all-permissions</permission>
 					</permissions>
