@@ -122,7 +122,7 @@ class OpenCVWithJavaFX extends javafx.application.Application with FaceScanner w
       }
     }
 
-  val nativeLibName = if (runOnMac) "/opt/local/share/OpenCV/java/libopencv_java244.dylib" else "c:/openCV/build/java/opencv-244.jar"
+  val nativeLibName = if (runOnMac) "/opt/local/share/OpenCV/java/libopencv_java244.dylib" else "c:/openCV/build/java/x86/opencv_java244.dll"
 
   override def init(): Unit = {
     // important to have this statement on the "right" thread
