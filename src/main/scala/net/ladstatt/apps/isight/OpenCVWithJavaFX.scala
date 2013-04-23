@@ -31,6 +31,7 @@ import javafx.util.converter.IntegerStringConverter
 import org.opencv.core.Range
 import javafx.scene.control.Slider
 import javafx.geometry.Orientation
+import org.opencv.imgproc.Imgproc
 
 /**
  * see also http://ladstatt.blogspot.com/
@@ -145,7 +146,7 @@ class OpenCVWithJavaFX extends javafx.application.Application with FaceScanner w
     hbox
   }
 
-  def mkSlider(min: Int, max: Int, orientation : Orientation): Slider = {
+  def mkSlider(min: Int, max: Int, orientation: Orientation): Slider = {
     val slider = new Slider()
     slider.setMin(min)
     slider.setMax(max)
@@ -186,14 +187,21 @@ class OpenCVWithJavaFX extends javafx.application.Application with FaceScanner w
     val scene = new Scene(bp, 1280, 920)
     stage.setScene(scene)
 
+    def convert2Gray(originalMat: Mat): Mat = {
+      val grayMat = new Mat
+      Imgproc.cvtColor(originalMat, grayMat, Imgproc.COLOR_BGR2GRAY)
+      grayMat
+    }
+
     imageService.setOnSucceeded(new EventHandler[WorkerStateEvent] {
       override def handle(event: WorkerStateEvent) = {
         event.getSource().getValue match {
           case Left(e: RuntimeException) => println(e.getMessage)
           case Right(mat: Mat) => {
             val choppedMat = new Mat(mat, new Range(1, heightSlider.getValue.toInt), new Range(1, widthSlider.getValue.toInt))
+            val grayMat = convert2Gray(choppedMat)
             val old = System.currentTimeMillis()
-            setImage(mat2Image(if (toggleBtn.isSelected()) scanFace(choppedMat) else choppedMat))
+            setImage(mat2Image(if (toggleBtn.isSelected()) scanFace(grayMat) else grayMat))
             val time = (System.currentTimeMillis() - old)
             label.textProperty.set("%s ms".format(time))
             imageService.restart
