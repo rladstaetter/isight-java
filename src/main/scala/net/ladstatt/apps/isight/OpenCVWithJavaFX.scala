@@ -2,6 +2,14 @@ package net.ladstatt.apps.isight
 
 import java.io.ByteArrayInputStream
 import java.io.File
+
+import scala.annotation.elidable
+import scala.annotation.elidable.ASSERTION
+import scala.collection.JavaConversions.seqAsJavaList
+import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
+
 import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.MatOfByte
@@ -14,6 +22,7 @@ import org.opencv.highgui.Highgui
 import org.opencv.highgui.VideoCapture
 import org.opencv.imgproc.Imgproc
 import org.opencv.objdetect.CascadeClassifier
+
 import javafx.application.Application
 import javafx.beans.property.SimpleObjectProperty
 import javafx.concurrent.Service
@@ -22,6 +31,7 @@ import javafx.event.Event
 import javafx.event.EventHandler
 import javafx.geometry.Orientation
 import javafx.scene.Scene
+import javafx.scene.control.ComboBox
 import javafx.scene.control.Label
 import javafx.scene.control.ListCell
 import javafx.scene.control.ListView
@@ -34,9 +44,8 @@ import javafx.scene.layout.HBox
 import javafx.scene.text.Font
 import javafx.stage.Stage
 import javafx.util.Callback
+
 import OpenCV._
-import javafx.scene.control.ComboBox
-import scala.collection.JavaConversions._
 
 /**
  * For a discussion of the concepts of this application see http://ladstatt.blogspot.com/
@@ -57,6 +66,15 @@ trait Utils {
       case Right(r) => right(r)
     }
   }
+  
+  def attempt[U,X](e: Try[U])(onFailure: => Throwable => X, onSuccess: => U => X): X = {
+    e match {
+    	  case Failure(e) => onFailure(e)
+      case Success(value) => onSuccess(value)
+    }
+  }
+  
+  
 }
 
 object OpenCV {
@@ -375,13 +393,13 @@ object OpenCV {
       System.load(new File(nativeLibName).getAbsolutePath())
     }
 
-    def mat2Image(mat: Mat): Either[Exception,Image] = {
+    def mat2Image(mat: Mat): Try[Image] = {
       val memory = new MatOfByte
       try {
     	  	Highgui.imencode(".png", mat, memory)
-    	  	Right(new Image(new ByteArrayInputStream(memory.toArray())))
+    	  	Success(new Image(new ByteArrayInputStream(memory.toArray())))
       } catch {
-        case e  : Exception => Left(e)
+        case e  : Exception => Failure(e)
       }
     }
 
@@ -421,12 +439,12 @@ object OpenCV {
       image
     }
 
-    def sourceMat: Either[Exception, Mat] = {
+    def sourceMat: Try[Mat] = {
       assert(videoCapture.isOpened())
       if (videoCapture.grab) {
-        Right(takeImage)
+        Success(takeImage)
       } else {
-        Left(new RuntimeException("Couldn't grab image!"))
+        Failure(new RuntimeException("Couldn't grab image!"))
       }
     }
 
@@ -454,7 +472,7 @@ object OpenCV {
   }
 }
 
-class WebcamService extends Service[Either[Exception, Mat]] with OpenCVUtils with JfxUtils with ImageSource {
+class WebcamService extends Service[Try[Mat]] with OpenCVUtils with JfxUtils with ImageSource {
 
   val videoCapture: VideoCapture = new VideoCapture(0)
 
@@ -522,7 +540,7 @@ class OpenCVWithJavaFX extends javafx.application.Application with FaceScanner w
 //  val MaxWidth = 1280
 //  val MaxHeight = 720
   val MaxWidth = 1024
-  val MaxHeight = 400
+  val MaxHeight = 720
   
   override def start(stage: Stage): Unit = {
     val imageService = new WebcamService
@@ -594,7 +612,7 @@ class OpenCVWithJavaFX extends javafx.application.Application with FaceScanner w
                 toggleOp(blurToggle, bwFiltered)(
                     blur(new Size(blurSlider.getValue.toInt, blurSlider.getValue.toInt)), noOp)
               val faceDetected = toggleOp(scanFaceToggle, blurred)(scanFace, noOp)
-              either(mat2Image(faceDetected))(e => println(e.getMessage), image => setImage(image))
+              attempt(mat2Image(faceDetected))(e => println(e.getMessage), image => setImage(image))
               val time = (System.currentTimeMillis() - old)
               label.textProperty.set("%s ms".format(time))
               imageService.restart
