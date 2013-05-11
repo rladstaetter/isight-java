@@ -54,24 +54,23 @@ trait Utils {
   lazy val runOnMac =
     {
       System.getProperty("os.name").toLowerCase match {
-        case"mac os x" => true
+        case "mac os x" => true
         case _ => false
       }
     }
 
-  
   /**
    * function to measure execution time of first function, optionally executing a display function,
    * returning the time in milliseconds
    */
-   def time[A](a: => A, display: Long => Unit = s => ()) : Long = {
-       val now = System.nanoTime
-        val result = a
-        val micros = (System.nanoTime - now) / 1000
-        display(micros)
-        micros
-      }
-  
+  def time[A](a: => A, display: Long => Unit = s => ()): A = {
+    val now = System.nanoTime
+    val result = a
+    val micros = (System.nanoTime - now) / 1000
+    display(micros)
+    result
+  }
+
 }
 
 object OpenCV {
@@ -82,60 +81,57 @@ object OpenCV {
 
   val colorConstants =
     Map(
-    		"COLOR_BGR2GRAY" -> ImgprocColor("COLOR_BGR2GRAY", Imgproc.COLOR_BGR2GRAY),
-    		"COLOR_BGR2RGB" -> ImgprocColor("COLOR_BGR2RGB", Imgproc.COLOR_BGR2RGB),
-    		"COLOR_BGR2Luv" -> ImgprocColor("COLOR_BGR2Luv", Imgproc.COLOR_BGR2Luv)
-     )
+      "COLOR_BGR2GRAY" -> ImgprocColor("COLOR_BGR2GRAY", Imgproc.COLOR_BGR2GRAY),
+      "COLOR_BGR2RGB" -> ImgprocColor("COLOR_BGR2RGB", Imgproc.COLOR_BGR2RGB),
+      "COLOR_BGR2Luv" -> ImgprocColor("COLOR_BGR2Luv", Imgproc.COLOR_BGR2Luv))
 
   trait OpenCVUtils extends Utils {
 
     def loadNativeLibs() = {
-      val nativeLibName = if (runOnMac)"/opt/local/share/OpenCV/java/libopencv_java244.dylib" else"c:/openCV/build/java/x64/opencv_java244.dll"
+      val nativeLibName = if (runOnMac) "/opt/local/share/OpenCV/java/libopencv_java244.dylib" else "c:/openCV/build/java/x64/opencv_java244.dll"
       System.load(new File(nativeLibName).getAbsolutePath())
     }
 
     def mat2Image(mat: Mat): Future[Image] = {
-     future {
-      val memory = new MatOfByte
-      try {
-    	  	Highgui.imencode(".png", mat, memory)
-    	  	new Image(new ByteArrayInputStream(memory.toArray()))
+      future {
+        val memory = new MatOfByte
+        try {
+          Highgui.imencode(".png", mat, memory)
+          new Image(new ByteArrayInputStream(memory.toArray()))
+        }
       }
-     } 
     }
 
-    //def noOp(mat: Mat) : Future[Mat]= future {mat}
-
-    def colorSpace(enabled : => Boolean)(colorSpace : => Int)(input: Mat): Future[Mat] = {
+    def colorSpace(enabled: => Boolean)(colorSpace: => Int)(input: Mat): Future[Mat] = {
       future {
         if (enabled) {
-     	val colorTransformed = new Mat
-		Imgproc.cvtColor(input, colorTransformed, colorSpace)
-    		colorTransformed
+          val colorTransformed = new Mat
+          Imgproc.cvtColor(input, colorTransformed, colorSpace)
+          colorTransformed
         } else input
       } recover {
         case x => input
       }
     }
 
-    def blur(enabled : => Boolean)(size: Size)(input: Mat): Future[Mat] = {
-     future {
-       if (enabled) {
-       val blurredMat = new Mat
-       Imgproc.blur(input, blurredMat, size)
-       blurredMat
-       } else {
-         input
-       }
-     } recover {
-       case e => input
-     }
-    }
-
-    def chop(enabled : => Boolean)(height: => Int, width: => Int)(input: Mat): Future[Mat] =
+    def blur(enabled: => Boolean)(size: Size)(input: Mat): Future[Mat] = {
       future {
         if (enabled) {
-        	  new Mat(input, new Range(1, height), new Range(1, width))
+          val blurredMat = new Mat
+          Imgproc.blur(input, blurredMat, size)
+          blurredMat
+        } else {
+          input
+        }
+      } recover {
+        case e => input
+      }
+    }
+
+    def chop(enabled: => Boolean)(height: => Int, width: => Int)(input: Mat): Future[Mat] =
+      future {
+        if (enabled) {
+          new Mat(input, new Range(1, height), new Range(1, width))
         } else input
       } recover {
         case e => input
@@ -152,13 +148,13 @@ object OpenCV {
       image
     }
 
-    def sourceMat: Future[Mat] = 
+    def sourceMat: Future[Mat] =
       future {
-     	  assert(videoCapture.isOpened())
-     	  if (videoCapture.grab) {
-     		  takeImage
-     	  } else 
-     		 throw new RuntimeException("Couldn't grab image!")
+        assert(videoCapture.isOpened())
+        if (videoCapture.grab) {
+          takeImage
+        } else
+          throw new RuntimeException("Couldn't grab image!")
       }
 
   }
@@ -167,22 +163,19 @@ object OpenCV {
 
     def faceDetector: CascadeClassifier
 
-    def scanFace(enabled : => Boolean)(input: Mat): Future[Mat] = {
-	future {
-	  if (enabled) {
-      // Detect faces in the image.
-      // MatOfRect is a special container class for Rect.
-      val faceDetections = new MatOfRect()
-      faceDetector.detectMultiScale(input, faceDetections)
-      // Draw a bounding box around each face.
-      for (rect <- faceDetections.toArray()) {
-        Core.rectangle(input, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height), new Scalar(0, 255, 0))
+    def scanFace(enabled: => Boolean)(input: Mat): Future[Mat] = {
+      future {
+        if (enabled) {
+          val faceDetections = new MatOfRect()
+          faceDetector.detectMultiScale(input, faceDetections)
+          for (rect <- faceDetections.toArray()) {
+            Core.rectangle(input, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height), new Scalar(0, 255, 0))
+          }
+          input
+        } else input
+      } recover {
+        case e => input
       }
-      input
-	  } else input
-    } recover {
-      case e => input
-    }
     }
   }
 }
@@ -215,9 +208,9 @@ trait JfxUtils {
   def mkTop: HBox = {
     val hbox = new HBox()
     hbox.setStyle("-fx-padding: 15;" +
-     "-fx-background-color: #333333," +
-     "linear-gradient(#f3f3f3 0%, #ced3da 100%);" +
-     "-fx-background-insets: 0, 0 0 1 0;")
+      "-fx-background-color: #333333," +
+      "linear-gradient(#f3f3f3 0%, #ced3da 100%);" +
+      "-fx-background-insets: 0, 0 0 1 0;")
     hbox
   }
 
