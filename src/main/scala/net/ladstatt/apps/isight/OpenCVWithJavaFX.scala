@@ -2,12 +2,7 @@ package net.ladstatt.apps.isight
 
 import java.io.ByteArrayInputStream
 import java.io.File
-import scala.annotation.elidable
-import scala.annotation.elidable.ASSERTION
 import scala.collection.JavaConversions.seqAsJavaList
-import scala.util.Failure
-import scala.util.Success
-import scala.util.Try
 import org.opencv.core.Core
 import org.opencv.core.Mat
 import org.opencv.core.MatOfByte
@@ -51,13 +46,12 @@ import javafx.application.Platform
  */
 trait Utils {
 
-  lazy val runOnMac =
-    {
-      System.getProperty("os.name").toLowerCase match {
-        case "mac os x" => true
-        case _ => false
-      }
+  lazy val runOnMac = {
+    System.getProperty("os.name").toLowerCase match {
+      case "mac os x" => true
+      case _ => false
     }
+  }
 
   /**
    * function to measure execution time of first function, optionally executing a display function,
@@ -88,22 +82,20 @@ object OpenCV {
   trait OpenCVUtils extends Utils {
 
     def loadNativeLibs() = {
-      val nativeLibName = if (runOnMac) "/opt/local/share/OpenCV/java/libopencv_java244.dylib" else "c:/openCV/build/java/x64/opencv_java244.dll"
+      val nativeLibName = if (runOnMac) "/Users/lad/Documents/net.ladstatt/opencv/src/main/lib/mac/libopencv_java246.dylib" else "c:/openCV/build/java/x64/opencv_java244.dll"
       System.load(new File(nativeLibName).getAbsolutePath())
     }
 
     def mat2Image(mat: Mat): Future[Image] = {
-      future {
+      Future {
         val memory = new MatOfByte
-        try {
-          Highgui.imencode(".png", mat, memory)
-          new Image(new ByteArrayInputStream(memory.toArray()))
-        }
+        Highgui.imencode(".png", mat, memory)
+        new Image(new ByteArrayInputStream(memory.toArray()))
       }
     }
 
     def colorSpace(enabled: => Boolean)(colorSpace: => Int)(input: Mat): Future[Mat] = {
-      future {
+      Future {
         if (enabled) {
           val colorTransformed = new Mat
           Imgproc.cvtColor(input, colorTransformed, colorSpace)
@@ -115,7 +107,7 @@ object OpenCV {
     }
 
     def blur(enabled: => Boolean)(size: Size)(input: Mat): Future[Mat] = {
-      future {
+      Future {
         if (enabled) {
           val blurredMat = new Mat
           Imgproc.blur(input, blurredMat, size)
@@ -129,7 +121,7 @@ object OpenCV {
     }
 
     def chop(enabled: => Boolean)(height: => Int, width: => Int)(input: Mat): Future[Mat] =
-      future {
+      Future {
         if (enabled) {
           new Mat(input, new Range(1, height), new Range(1, width))
         } else input
@@ -149,7 +141,7 @@ object OpenCV {
     }
 
     def sourceMat: Future[Mat] =
-      future {
+      Future {
         assert(videoCapture.isOpened())
         if (videoCapture.grab) {
           takeImage
@@ -164,12 +156,12 @@ object OpenCV {
     def faceDetector: CascadeClassifier
 
     def scanFace(enabled: => Boolean)(input: Mat): Future[Mat] = {
-      future {
+      Future {
         if (enabled) {
           val faceDetections = new MatOfRect()
           faceDetector.detectMultiScale(input, faceDetections)
           for (rect <- faceDetections.toArray()) {
-            Core.rectangle(input, new Point(rect.x, rect.y), new Point(rect.x + rect.width, rect.y + rect.height), new Scalar(0, 255, 0))
+            Core.rectangle(input, new Point(rect.x, rect.y), new Point(rect.x + rect.width.toDouble, rect.y + rect.height.toDouble), new Scalar(0, 255, 0))
           }
           input
         } else input
@@ -178,6 +170,7 @@ object OpenCV {
       }
     }
   }
+
 }
 
 class WebcamService extends Service[Future[Mat]] with OpenCVUtils with JfxUtils with ImageSource {
@@ -202,8 +195,13 @@ trait JfxUtils {
     override def call(list: ListView[T]): ListCell[T] = listCellGenerator(list)
   }
 
-  def mkEventHandler[E <: Event](f: E => Unit) = new EventHandler[E] { def handle(e: E) = f(e) }
-  def mkTask[X](callFn: => X): Task[X] = new Task[X] { override def call(): X = callFn }
+  def mkEventHandler[E <: Event](f: E => Unit) = new EventHandler[E] {
+    def handle(e: E) = f(e)
+  }
+
+  def mkTask[X](callFn: => X): Task[X] = new Task[X] {
+    override def call(): X = callFn
+  }
 
   def mkTop: HBox = {
     val hbox = new HBox()
@@ -214,7 +212,7 @@ trait JfxUtils {
     hbox
   }
 
-  def mkSlider(min: Int, max: Int, initialValue: Int, orientation: Orientation): Slider = {
+  def mkSlider(min: Double, max: Double, initialValue: Double, orientation: Orientation): Slider = {
     require(min <= initialValue)
     require(initialValue <= max)
     val slider = new Slider()
@@ -234,6 +232,12 @@ trait JfxUtils {
 
 class OpenCVWithJavaFX extends javafx.application.Application with FaceScanner with OpenCVUtils with Utils with JfxUtils {
 
+  def execOnUIThread(f: => Unit) {
+    Platform.runLater(new Runnable {
+      override def run() = f
+    })
+  }
+
   // Create a face detector from the cascade file in the resources directory.
   lazy val faceDetector: CascadeClassifier = new CascadeClassifier(getClass().getResource("/lbpcascade_frontalface.xml").getPath())
 
@@ -243,11 +247,13 @@ class OpenCVWithJavaFX extends javafx.application.Application with FaceScanner w
     if (b.isSelected()) left(mat) else right(mat)
 
   val imageProperty = new SimpleObjectProperty[Image]()
-  def setImage(image: Image) = imageProperty.set(image)
+
+  def setImage(image: Image) = execOnUIThread(imageProperty.set(image))
+
   def getImage(): Image = imageProperty.get
 
-  val MaxWidth = 1024
-  val MaxHeight = 720
+  val MaxWidth = 1024.0
+  val MaxHeight = 720.0
 
   override def start(stage: Stage): Unit = {
     val imageService = new WebcamService
@@ -263,7 +269,7 @@ class OpenCVWithJavaFX extends javafx.application.Application with FaceScanner w
     val heightSlider = mkSlider(2, MaxHeight, MaxHeight, Orientation.VERTICAL)
 
     val chopToggle = new ToggleButton("Activate Chopping")
-    def chopWithSliders = chop(chopToggle.isSelected)(heightSlider.getValue.toInt, widthSlider.getValue.toInt)_
+    def chopWithSliders = chop(chopToggle.isSelected)(heightSlider.getValue.toInt, widthSlider.getValue.toInt) _
     chopToggle.setSelected(true)
     heightSlider.disableProperty.bind(chopToggle.selectedProperty.not)
     widthSlider.disableProperty.bind(chopToggle.selectedProperty.not)
@@ -312,7 +318,7 @@ class OpenCVWithJavaFX extends javafx.application.Application with FaceScanner w
               fromCamera <- event.getSource.getValue.asInstanceOf[Future[Mat]]
               chopped <- chopWithSliders(fromCamera)
               colorspaced <- colorSpace(colorToggle.isSelected)(colorComboBox.getValue.value)(chopped)
-              blurred <- blur(blurToggle.isSelected)(new Size(blurSlider.getValue.toInt, blurSlider.getValue.toInt))(colorspaced)
+              blurred <- blur(blurToggle.isSelected)(new Size(blurSlider.getValue, blurSlider.getValue))(colorspaced)
               faced <- scanFace(scanFaceToggle.isSelected)(blurred)
               image <- mat2Image(faced)
             } {
